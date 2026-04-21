@@ -31,12 +31,16 @@
 - [x] Add `@platform/commands`.
 - [x] Add `@platform/events`.
 - [x] Add `@platform/jobs`.
+- [x] Add `@platform/db-drizzle`.
 - [x] Add `@platform/plugin-solver`.
 - [x] Add end-to-end command -> event -> subscriber -> job orchestration coverage.
 - [x] Reduce the integration harness to a single remaining compat shim.
+- [x] Replace the final compat shim with a real core package and remove compatibility fallback usage.
 
 ## Stage 4 - Follow-On
 
-- [ ] Provision separate live plugin and library repositories.
-- [ ] Wire the live package channels to published signed artifacts.
-- [ ] Stand up live cross-repo integration verification against those external repos.
+- [x] Provision separate live `gutula/*` coordination repositories for core, catalogs, and integration.
+- [x] Seed the standalone catalog indexes from the checked-out first-party packages.
+- [x] Wire the live package channels to published signed artifacts.
+- [x] Stand up remote-first cross-repo integration verification against those external repos.
+- [ ] Expand live signed release coverage beyond the initial stable channel fixtures.

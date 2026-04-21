@@ -25,3 +25,10 @@
 - Replaced brittle source-root discovery with path-utility-based resolution that works for both source-tree and bundled CLI paths, including Windows-style paths.
 - Added smoke and unit coverage for `gutu init` in both `copy` and `symlink` modes plus Windows-oriented source-root resolution cases.
 - Updated the README, status ledger, task ledger, and risk register so the initialization flow is documented honestly as cross-platform and enterprise-safe.
+- Added `@platform/db-drizzle` as a real core runtime package inside `gutu-core`, eliminating the final integration compat shim.
+- Added live topology manifests plus `gutu rollout sync-catalogs` and `gutu rollout publish-package` so the core repo can seed standalone catalogs, build first-party packages, upload signed GitHub Release assets, and promote live channel metadata.
+- Added GitHub Release upload support to `@gutu/release` and wired the publish flow to commit and push catalog promotions automatically.
+- Converted `gutu-core`, `gutu-libraries`, `gutu-plugins`, and `gutu-ecosystem-integration` into live `gutula/*` repositories and pushed their standalone `main` branches.
+- Populated the standalone catalog repos with full first-party inventory metadata, added `stable` and `next` channel files, and added CI validation for ordering, duplicates, signatures, and release asset reachability.
+- Rebuilt the integration harness around a live-topology clone path that is now the default certification mode, with `GUTU_ECOSYSTEM_MODE=local` kept as the explicit umbrella-workspace override.
+- Published signed GitHub Release artifacts for `@platform/communication` and `@plugins/notifications-core` and promoted them into the live stable channels used by `gutu vendor sync`.

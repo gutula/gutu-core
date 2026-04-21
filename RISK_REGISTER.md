@@ -9,11 +9,12 @@ Mitigation:
 - Keep `gutu doctor` checking repository boundaries.
 - Document the no-plugin-source rule in README, CONTRIBUTING, and SECURITY.
 
-### R2. Live external publishing is not provisioned yet
+### R2. Live stable channel coverage is still intentionally narrow
 
 Mitigation:
 
-- Use the shipped release/sign/vendor flows locally until the external repos and CI secrets are provisioned.
+- Keep `gutu rollout publish-package` as the standard path for promoting more first-party packages into the live channels.
+- Treat the currently published stable fixtures as the minimum install-proof surface until broader package promotion is complete.
 
 ### R3. Remote artifact trust still depends on operator-managed keys
 
@@ -26,15 +27,15 @@ Mitigation:
 
 Mitigation:
 
-- Use the implemented `gutu rollout provision-github` command once `GITHUB_TOKEN` is present.
-- Keep rollout topology in `ecosystem/rollout/organization.json` so provisioning stays deterministic.
+- Use `GUTU_RELEASE_TOKEN` or `GITHUB_TOKEN` for future provisioning and publish runs.
+- Keep rollout topology in `ecosystem/rollout/organization.json` and `ecosystem/rollout/live-topology.json` so provisioning and remote certification stay deterministic.
 
-### R5. One compat shim still remains in the integration harness
+### R5. Remote-first certification depends on external repo and release availability
 
 Mitigation:
 
-- Keep the audit report tracking the remaining shim count explicitly.
-- Replace the final shim in a follow-on wave so the integration repo depends only on real core or external first-party packages.
+- Keep the live topology manifest small, explicit, and versioned in-repo.
+- Keep `GUTU_ECOSYSTEM_MODE=local` as the emergency fallback when GitHub availability or rate limiting interferes with remote certification.
 
 ### R6. Cross-plugin orchestration currently ships as an in-memory reference runtime
 

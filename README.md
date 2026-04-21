@@ -57,10 +57,12 @@ The rebuilt core baseline now includes:
 - remote `file://` and `http(s)` artifact fetching with digest enforcement
 - signed vendor sync for consumer workspaces
 - scaffolding for external plugin, library, and integration repositories
-- rollout automation for batch repo scaffolding, release promotion, and GitHub provisioning
+- rollout automation for batch repo scaffolding, catalog seeding, GitHub provisioning, and package publishing into live channels
 - repository-boundary doctor checks for keeping `gutu-core` plugin-free
-- first-party runtime packages for package metadata, permissions, schema, commands, events, jobs, and plugin solving
+- first-party runtime packages for package metadata, permissions, schema, commands, events, jobs, database access, and plugin solving
 - an explicit orchestration model built around commands, durable events, and jobs/workflows instead of generic hooks
+- checked-in live topology metadata for cloning the real `gutula/*` repo graph during release orchestration and certification
+- standalone catalog repos with `catalog/index.json` plus `stable` and `next` channel files backed by signed GitHub Release artifacts
 
 ## Current Core Packages
 
@@ -74,6 +76,7 @@ The rebuilt core baseline now includes:
 - `@platform/commands`: explicit cross-plugin command dispatch with idempotency-aware receipts
 - `@platform/events`: durable outbox-style event envelopes, subscriptions, retries, dead-lettering, and replay
 - `@platform/jobs`: job definitions, retries, dead-letter handling, and workflow transitions
+- `@platform/db-drizzle`: postgres database client and raw SQL helpers for extracted first-party plugins
 - `@platform/plugin-solver`: dependency ordering plus command/event topology warnings
 
 ## Compare The Operating Model
@@ -96,7 +99,9 @@ bun run test
 bun run ci
 bun run release:prepare
 bun run rollout:scaffold
+bun run rollout:sync-catalogs
 bun run gutu -- init demo-workspace --framework-install-mode auto
+bun run gutu -- rollout publish-package --target @platform/communication --kind library --channel stable
 bun run gutu -- doctor
 ```
 
@@ -108,6 +113,13 @@ bun run gutu -- doctor
 - Windows and other symlink-restricted environments fall back to `copy`.
 - `copy` is the safest mode for enterprise rollouts where link policies are unknown.
 - `gutu vendor sync` still handles plugin and library artifacts after the framework bootstrap is in place.
+
+## Live Rollout Surface
+
+- `ecosystem/rollout/live-topology.json` captures the real repo graph used for live publishing and certification.
+- `gutu rollout sync-catalogs` seeds the standalone catalog indexes from the checked-out first-party repos.
+- `gutu rollout publish-package` builds a target package, creates signed release assets, uploads them to GitHub Releases, and promotes the result into the live catalog repo and channel.
+- The initial live stable channel is seeded with signed assets for `@platform/communication` and `@plugins/notifications-core`, which are also the consumer-smoke fixtures for the live certification lane.
 
 ## More Reading
 

@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import * as nodePath from "node:path";
 import { basename, dirname, join, resolve } from "node:path";
-import { createPublicKey, verify } from "node:crypto";
+import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -159,6 +159,7 @@ export type PromoteReleaseArtifactOptions = {
   repo: string;
   manifestPath: string;
   signaturePath?: string;
+  signatureBase64?: string;
   publicKeyPem?: string;
   uriBase: string;
   channel?: string;
@@ -790,7 +791,6 @@ export async function publishPackageRelease(
   preparePublishWorkspace(workspaceRoot, publishWorkspaceRoot);
 
   const packageRepoRoot = join(publishWorkspaceRoot, nodePath.relative(workspaceRoot, packageRecord.repoRoot));
-  const packageRoot = join(packageRepoRoot, packageRecord.packageRelativePath);
   const build = spawnSync("bun", ["run", "build"], {
     cwd: packageRepoRoot,
     encoding: "utf8"
@@ -804,6 +804,7 @@ export async function publishPackageRelease(
     outDir: join(packageRepoRoot, "artifacts", "release")
   });
   const signature = signReleaseManifestFile(bundle.manifestPath, options.signingPrivateKeyPem);
+  const artifactSignatureBase64 = signArtifactDigest(bundle.manifest.artifact.sha256, options.signingPrivateKeyPem);
   const tag = options.tag ?? `v${bundle.version}`;
   const release = await publishGitHubRelease({
     repo: packageRecord.repo,
@@ -826,7 +827,7 @@ export async function publishPackageRelease(
     kind: packageRecord.kind,
     repo: packageRecord.repo,
     manifestPath: bundle.manifestPath,
-    signaturePath: signature.signaturePath,
+    signatureBase64: artifactSignatureBase64,
     publicKeyPem,
     uriBase: `https://github.com/${packageRecord.repo}/releases/download/${tag}`,
     channel: options.channel ?? packageRecord.channel,
@@ -866,7 +867,12 @@ export function promoteReleaseArtifact(
     artifact: { path: string; sha256: string };
     version: string;
   };
-  const signature = options.signaturePath ? JSON.parse(readFileSync(resolve(cwd, options.signaturePath), "utf8")) as { signature: string } : undefined;
+  const signature =
+    options.signatureBase64
+      ? { signature: options.signatureBase64 }
+      : options.signaturePath
+        ? JSON.parse(readFileSync(resolve(cwd, options.signaturePath), "utf8")) as { signature: string }
+        : undefined;
   const entry = catalogEntrySchema.parse({
     id: options.packageId,
     kind: options.kind,
@@ -1565,4 +1571,9 @@ function upsertChannelEntry(channelPath: string, channelId: string, entry: Catal
 function writeJsonFile(filePath: string, value: unknown) {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+}
+
+function signArtifactDigest(sha256: string, privateKeyPem: string): string {
+  const privateKey = createPrivateKey(privateKeyPem);
+  return sign(null, Buffer.from(sha256, "utf8"), privateKey).toString("base64");
 }

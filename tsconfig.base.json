@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["bun-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@gutu/kernel": ["framework/core/kernel/src/index.ts"],
+      "@gutu/ecosystem": ["framework/core/ecosystem/src/index.ts"],
+      "@gutu/cli": ["framework/core/cli/src/index.ts"],
+      "@gutu/release": ["framework/core/release/src/index.ts"],
+      "@platform/kernel": ["framework/core/platform-kernel/src/index.ts"],
+      "@platform/permissions": ["framework/core/permissions/src/index.ts"],
+      "@platform/schema": ["framework/core/schema/src/index.ts"],
+      "@platform/commands": ["framework/core/commands/src/index.ts"],
+      "@platform/events": ["framework/core/events/src/index.ts"],
+      "@platform/jobs": ["framework/core/jobs/src/index.ts"],
+      "@platform/plugin-solver": ["framework/core/plugin-solver/src/index.ts"]
+    }
+  }
+}

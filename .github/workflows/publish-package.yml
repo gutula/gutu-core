@@ -1,0 +1,40 @@
+name: Publish Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Package id, repo name, or repo path to publish"
+        required: true
+        type: string
+      kind:
+        description: "Package kind"
+        required: true
+        type: choice
+        options:
+          - library
+          - plugin
+      channel:
+        description: "Catalog channel"
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - next
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.12"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun run gutu -- rollout publish-package --target "${{ inputs.target }}" --kind "${{ inputs.kind }}" --channel "${{ inputs.channel }}"
+        env:
+          GUTU_RELEASE_TOKEN: ${{ secrets.GUTU_RELEASE_TOKEN }}
+          GUTU_SIGNING_PRIVATE_KEY: ${{ secrets.GUTU_SIGNING_PRIVATE_KEY }}
+          GUTU_SIGNING_PUBLIC_KEY: ${{ secrets.GUTU_SIGNING_PUBLIC_KEY }}

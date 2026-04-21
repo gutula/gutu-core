@@ -1,0 +1,15 @@
+{
+  "name": "@gutu/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "gutu": "./src/bin.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gutu/ecosystem": "workspace:*",
+    "@gutu/release": "workspace:*"
+  }
+}

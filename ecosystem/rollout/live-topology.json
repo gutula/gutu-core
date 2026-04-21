@@ -1,0 +1,466 @@
+{
+  "schemaVersion": 1,
+  "organization": "gutula",
+  "consumerSmoke": {
+    "channel": "stable",
+    "libraryPackageId": "@platform/communication",
+    "pluginPackageId": "@plugins/notifications-core"
+  },
+  "repositories": [
+    {
+      "name": "gutu-core",
+      "kind": "core",
+      "path": "gutu-core",
+      "url": "https://github.com/gutula/gutu-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-libraries",
+      "kind": "catalog",
+      "path": "catalogs/gutu-libraries",
+      "url": "https://github.com/gutula/gutu-libraries.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugins",
+      "kind": "catalog",
+      "path": "catalogs/gutu-plugins",
+      "url": "https://github.com/gutula/gutu-plugins.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-builders",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-builders",
+      "url": "https://github.com/gutula/gutu-lib-admin-builders.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-contracts",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-contracts",
+      "url": "https://github.com/gutula/gutu-lib-admin-contracts.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-formview",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-formview",
+      "url": "https://github.com/gutula/gutu-lib-admin-formview.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-listview",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-listview",
+      "url": "https://github.com/gutula/gutu-lib-admin-listview.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-reporting",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-reporting",
+      "url": "https://github.com/gutula/gutu-lib-admin-reporting.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-shell-workbench",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-shell-workbench",
+      "url": "https://github.com/gutula/gutu-lib-admin-shell-workbench.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-admin-widgets",
+      "kind": "library",
+      "path": "libraries/gutu-lib-admin-widgets",
+      "url": "https://github.com/gutula/gutu-lib-admin-widgets.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ai",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ai",
+      "url": "https://github.com/gutula/gutu-lib-ai.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ai-evals",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ai-evals",
+      "url": "https://github.com/gutula/gutu-lib-ai-evals.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ai-guardrails",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ai-guardrails",
+      "url": "https://github.com/gutula/gutu-lib-ai-guardrails.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ai-mcp",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ai-mcp",
+      "url": "https://github.com/gutula/gutu-lib-ai-mcp.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ai-memory",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ai-memory",
+      "url": "https://github.com/gutula/gutu-lib-ai-memory.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ai-runtime",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ai-runtime",
+      "url": "https://github.com/gutula/gutu-lib-ai-runtime.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-analytics",
+      "kind": "library",
+      "path": "libraries/gutu-lib-analytics",
+      "url": "https://github.com/gutula/gutu-lib-analytics.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-chart",
+      "kind": "library",
+      "path": "libraries/gutu-lib-chart",
+      "url": "https://github.com/gutula/gutu-lib-chart.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-command-palette",
+      "kind": "library",
+      "path": "libraries/gutu-lib-command-palette",
+      "url": "https://github.com/gutula/gutu-lib-command-palette.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-communication",
+      "kind": "library",
+      "path": "libraries/gutu-lib-communication",
+      "url": "https://github.com/gutula/gutu-lib-communication.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-contracts",
+      "kind": "library",
+      "path": "libraries/gutu-lib-contracts",
+      "url": "https://github.com/gutula/gutu-lib-contracts.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-data-table",
+      "kind": "library",
+      "path": "libraries/gutu-lib-data-table",
+      "url": "https://github.com/gutula/gutu-lib-data-table.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-editor",
+      "kind": "library",
+      "path": "libraries/gutu-lib-editor",
+      "url": "https://github.com/gutula/gutu-lib-editor.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-email-templates",
+      "kind": "library",
+      "path": "libraries/gutu-lib-email-templates",
+      "url": "https://github.com/gutula/gutu-lib-email-templates.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-form",
+      "kind": "library",
+      "path": "libraries/gutu-lib-form",
+      "url": "https://github.com/gutula/gutu-lib-form.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-geo",
+      "kind": "library",
+      "path": "libraries/gutu-lib-geo",
+      "url": "https://github.com/gutula/gutu-lib-geo.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-layout",
+      "kind": "library",
+      "path": "libraries/gutu-lib-layout",
+      "url": "https://github.com/gutula/gutu-lib-layout.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-query",
+      "kind": "library",
+      "path": "libraries/gutu-lib-query",
+      "url": "https://github.com/gutula/gutu-lib-query.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-router",
+      "kind": "library",
+      "path": "libraries/gutu-lib-router",
+      "url": "https://github.com/gutula/gutu-lib-router.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-search",
+      "kind": "library",
+      "path": "libraries/gutu-lib-search",
+      "url": "https://github.com/gutula/gutu-lib-search.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-telemetry-ui",
+      "kind": "library",
+      "path": "libraries/gutu-lib-telemetry-ui",
+      "url": "https://github.com/gutula/gutu-lib-telemetry-ui.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui",
+      "url": "https://github.com/gutula/gutu-lib-ui.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-editor",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-editor",
+      "url": "https://github.com/gutula/gutu-lib-ui-editor.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-form",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-form",
+      "url": "https://github.com/gutula/gutu-lib-ui-form.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-kit",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-kit",
+      "url": "https://github.com/gutula/gutu-lib-ui-kit.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-query",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-query",
+      "url": "https://github.com/gutula/gutu-lib-ui-query.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-router",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-router",
+      "url": "https://github.com/gutula/gutu-lib-ui-router.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-shell",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-shell",
+      "url": "https://github.com/gutula/gutu-lib-ui-shell.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-table",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-table",
+      "url": "https://github.com/gutula/gutu-lib-ui-table.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-zone-next",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-zone-next",
+      "url": "https://github.com/gutula/gutu-lib-ui-zone-next.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-lib-ui-zone-static",
+      "kind": "library",
+      "path": "libraries/gutu-lib-ui-zone-static",
+      "url": "https://github.com/gutula/gutu-lib-ui-zone-static.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-admin-shell-workbench",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-admin-shell-workbench",
+      "url": "https://github.com/gutula/gutu-plugin-admin-shell-workbench.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-ai-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-ai-core",
+      "url": "https://github.com/gutula/gutu-plugin-ai-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-ai-evals",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-ai-evals",
+      "url": "https://github.com/gutula/gutu-plugin-ai-evals.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-ai-rag",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-ai-rag",
+      "url": "https://github.com/gutula/gutu-plugin-ai-rag.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-audit-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-audit-core",
+      "url": "https://github.com/gutula/gutu-plugin-audit-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-auth-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-auth-core",
+      "url": "https://github.com/gutula/gutu-plugin-auth-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-booking-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-booking-core",
+      "url": "https://github.com/gutula/gutu-plugin-booking-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-community-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-community-core",
+      "url": "https://github.com/gutula/gutu-plugin-community-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-content-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-content-core",
+      "url": "https://github.com/gutula/gutu-plugin-content-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-dashboard-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-dashboard-core",
+      "url": "https://github.com/gutula/gutu-plugin-dashboard-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-document-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-document-core",
+      "url": "https://github.com/gutula/gutu-plugin-document-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-files-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-files-core",
+      "url": "https://github.com/gutula/gutu-plugin-files-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-forms-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-forms-core",
+      "url": "https://github.com/gutula/gutu-plugin-forms-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-jobs-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-jobs-core",
+      "url": "https://github.com/gutula/gutu-plugin-jobs-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-knowledge-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-knowledge-core",
+      "url": "https://github.com/gutula/gutu-plugin-knowledge-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-notifications-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-notifications-core",
+      "url": "https://github.com/gutula/gutu-plugin-notifications-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-org-tenant-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-org-tenant-core",
+      "url": "https://github.com/gutula/gutu-plugin-org-tenant-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-page-builder-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-page-builder-core",
+      "url": "https://github.com/gutula/gutu-plugin-page-builder-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-portal-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-portal-core",
+      "url": "https://github.com/gutula/gutu-plugin-portal-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-role-policy-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-role-policy-core",
+      "url": "https://github.com/gutula/gutu-plugin-role-policy-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-search-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-search-core",
+      "url": "https://github.com/gutula/gutu-plugin-search-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-template-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-template-core",
+      "url": "https://github.com/gutula/gutu-plugin-template-core.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-user-directory",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-user-directory",
+      "url": "https://github.com/gutula/gutu-plugin-user-directory.git",
+      "branch": "main"
+    },
+    {
+      "name": "gutu-plugin-workflow-core",
+      "kind": "plugin",
+      "path": "plugins/gutu-plugin-workflow-core",
+      "url": "https://github.com/gutula/gutu-plugin-workflow-core.git",
+      "branch": "main"
+    }
+  ]
+}

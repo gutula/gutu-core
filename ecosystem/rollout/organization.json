@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "organization": "gutula",
+  "repositories": [
+    {
+      "name": "gutu-core",
+      "kind": "core",
+      "description": "Plugin-free foundation repository for the Gutu ecosystem."
+    },
+    {
+      "name": "gutu-libraries",
+      "kind": "catalog",
+      "description": "Catalog repository for first-party Gutu libraries."
+    },
+    {
+      "name": "gutu-plugins",
+      "kind": "catalog",
+      "description": "Catalog repository for first-party Gutu plugins."
+    },
+    {
+      "name": "gutu-ecosystem-integration",
+      "kind": "integration",
+      "description": "Cross-repo matrix verification for gutu-core, libraries, and plugins."
+    }
+  ]
+}

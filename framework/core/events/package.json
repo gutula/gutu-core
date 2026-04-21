@@ -1,0 +1,12 @@
+{
+  "name": "@platform/events",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@platform/jobs": "workspace:*",
+    "@platform/schema": "workspace:*"
+  }
+}

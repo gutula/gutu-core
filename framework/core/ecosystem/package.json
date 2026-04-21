@@ -1,0 +1,13 @@
+{
+  "name": "@gutu/ecosystem",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gutu/kernel": "workspace:*",
+    "@gutu/release": "workspace:*",
+    "zod": "^3.24.3"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@platform/db-drizzle",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "postgres": "^3.4.7"
+  }
+}

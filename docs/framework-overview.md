@@ -10,7 +10,7 @@ Gutu is a modular application framework ecosystem designed for teams that need s
 
 | Question | Answer |
 | --- | --- |
-| What is Gutu? | A contract-first framework ecosystem made up of `gutu-core`, standalone plugins, standalone libraries, app repos, catalogs, and certification tooling. |
+| What is Gutu? | A contract-first governed work OS made up of `gutu-core`, standalone plugins, optional operating-model packs, standalone libraries, app repos, catalogs, and certification tooling. |
 | What does it optimize for? | Independent development, explicit runtime composition, truthful docs, and production-grade verification. |
 | What is the main idea? | Keep shared runtime rules in `gutu-core`, keep domain ownership in plugins, keep reusable code in libraries, and make integration explicit through commands, events, jobs, and workflows. |
 
@@ -29,7 +29,7 @@ Gutu is a modular application framework ecosystem designed for teams that need s
 | --- | --- | --- |
 | `gutu-core` | Runtime primitives, ecosystem metadata, CLI, release truth | Commands, events, jobs, lockfiles, vendor sync, release manifests |
 | Libraries | Reusable contracts, UI foundations, communication helpers, AI/runtime utilities | `@platform/communication`, `@platform/ui-shell`, `@platform/contracts` |
-| Plugins | Domain ownership and operator/business surfaces | `notifications-core`, `booking-core`, `auth-core`, `workflow-core` |
+| Plugins and packs | Domain ownership and operator/business surfaces | `notifications-core`, `booking-core`, `auth-core`, `workflow-core`, `issues-core`, `runtime-bridge-core`, `company-builder-core` |
 | Apps | Product, docs, playground, and operator experiences | dev console, examples, docs site, playground |
 | Catalogs and integration | Discoverability, maturity, compatibility, consumer proof | plugin catalog, library catalog, ecosystem certification |
 
@@ -119,6 +119,8 @@ flowchart LR
 
 - You want plugins and libraries to evolve as independent repos, not just folders.
 - You need cross-plugin business orchestration but do not want a fragile hook bus.
+- You want a governed work OS that can stay generic at the core while layering optional operating-model packs on top.
+- You want collaboration and local-runtime ergonomics without giving up governed approvals, audit, and typed control-plane contracts.
 - You care about release truth, documentation quality, and certification as part of framework quality.
 - You want to keep domain ownership explicit even as AI, admin, and operator surfaces expand.
 

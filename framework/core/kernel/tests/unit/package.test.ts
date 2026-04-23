@@ -68,6 +68,25 @@ describe("@gutu/kernel", () => {
     expect(manifest.publicEvents).toContain("company.operating-model-published.v1");
   });
 
+  it("accepts install guidance metadata on package manifests", () => {
+    const manifest = definePackageManifest({
+      id: "@plugins/sales-core",
+      kind: "plugin",
+      version: "0.1.0",
+      description: "Sales plugin.",
+      defaultCategory: resolvePluginCategory("business", "sales_commerce"),
+      recommendedPlugins: ["crm-core"],
+      capabilityEnhancingPlugins: ["inventory-core"],
+      integrationOnlyPlugins: ["business-portals-core"],
+      suggestedPacks: ["sector-trading-distribution"],
+      standaloneSupported: true,
+      installNotes: ["CRM is recommended for governed handoff before quote creation."]
+    });
+
+    expect(manifest.recommendedPlugins).toContain("crm-core");
+    expect(manifest.suggestedPacks).toContain("sector-trading-distribution");
+  });
+
   it("rejects plugin manifests without a default category", () => {
     expect(() =>
       definePackageManifest({

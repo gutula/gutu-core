@@ -98,6 +98,12 @@ describe("@platform/kernel", () => {
           rationale: "Commercial policy is required for quote evaluation."
         }
       ],
+      recommendedPlugins: ["inventory-core"],
+      capabilityEnhancingPlugins: ["analytics-bi-core"],
+      integrationOnlyPlugins: ["business-portals-core"],
+      suggestedPacks: ["sector-trading-distribution"],
+      standaloneSupported: true,
+      installNotes: ["Inventory is recommended for physical fulfillment scenarios."],
       providesCapabilities: ["sales.orders"],
       requestedCapabilities: ["events.publish.sales"],
       ownsData: ["sales.orders"],
@@ -109,6 +115,8 @@ describe("@platform/kernel", () => {
 
     expect(definition.publicCommands).toContain("sales.orders.confirm");
     expect(definition.dependencyContracts[0]?.class).toBe("required");
+    expect(definition.recommendedPlugins).toContain("inventory-core");
+    expect(definition.suggestedPacks).toContain("sector-trading-distribution");
   });
 
   it("re-exports pack manifest helpers", () => {

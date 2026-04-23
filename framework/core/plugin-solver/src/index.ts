@@ -1,11 +1,34 @@
+export type SolvableDependencyClass = "required" | "optional" | "capability-enhancing" | "integration-only";
+
+export type SolvableDependencyContract = {
+  packageId: string;
+  class: SolvableDependencyClass;
+  capabilities?: string[] | undefined;
+  rationale?: string | undefined;
+};
+
 export type SolvableManifest = {
   id: string;
   dependsOn?: string[] | undefined;
+  dependencyContracts?: SolvableDependencyContract[] | undefined;
+  optionalWith?: string[] | undefined;
+  recommendedPlugins?: string[] | undefined;
+  capabilityEnhancingPlugins?: string[] | undefined;
+  integrationOnlyPlugins?: string[] | undefined;
+  suggestedPacks?: string[] | undefined;
   trustTier?: string | undefined;
   commands?: string[] | undefined;
   emits?: string[] | undefined;
   subscribesTo?: string[] | undefined;
   [key: string]: unknown;
+};
+
+export type InstallRecommendation = {
+  packageId: string;
+  dependencyId: string;
+  class: Exclude<SolvableDependencyClass, "required">;
+  present: boolean;
+  rationale?: string | undefined;
 };
 
 export type SolvePackageGraphResult = {
@@ -17,10 +40,52 @@ export type SolvePackageGraphResult = {
   }>;
   unresolvedSubscriptions: Array<{
     packageId: string;
-    eventType: string;
+      eventType: string;
   }>;
   duplicateCommands: string[];
+  optionalDependencies: InstallRecommendation[];
+  capabilityEnhancingDependencies: InstallRecommendation[];
+  integrationOnlyDependencies: InstallRecommendation[];
+  suggestedPacks: Array<{
+    packageId: string;
+    packId: string;
+  }>;
 };
+
+function normalizeDependencyContracts(manifest: SolvableManifest): SolvableDependencyContract[] {
+  const contracts: SolvableDependencyContract[] = [];
+  const seen = new Set<string>();
+
+  const push = (contract: SolvableDependencyContract) => {
+    const key = `${contract.class}:${contract.packageId}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    contracts.push(contract);
+  };
+
+  for (const packageId of manifest.dependsOn ?? []) {
+    push({ packageId, class: "required" });
+  }
+  for (const contract of manifest.dependencyContracts ?? []) {
+    push(contract);
+  }
+  for (const packageId of manifest.optionalWith ?? []) {
+    push({ packageId, class: "optional" });
+  }
+  for (const packageId of manifest.recommendedPlugins ?? []) {
+    push({ packageId, class: "optional" });
+  }
+  for (const packageId of manifest.capabilityEnhancingPlugins ?? []) {
+    push({ packageId, class: "capability-enhancing" });
+  }
+  for (const packageId of manifest.integrationOnlyPlugins ?? []) {
+    push({ packageId, class: "integration-only" });
+  }
+
+  return contracts;
+}
 
 export function solvePackageGraph(input: {
   requested: string[];
@@ -31,9 +96,14 @@ export function solvePackageGraph(input: {
   allowRestrictedPreviewForUnknownPlugins?: boolean | undefined;
 }): SolvePackageGraphResult {
   const manifestMap = new Map(input.manifests.map((manifest) => [manifest.id, manifest]));
+  const dependencyMap = new Map(input.manifests.map((manifest) => [manifest.id, normalizeDependencyContracts(manifest)]));
   const orderedActivation: string[] = [];
   const warnings: string[] = [];
   const missingDependencies: Array<{ packageId: string; dependencyId: string }> = [];
+  const optionalDependencies: InstallRecommendation[] = [];
+  const capabilityEnhancingDependencies: InstallRecommendation[] = [];
+  const integrationOnlyDependencies: InstallRecommendation[] = [];
+  const suggestedPacks: Array<{ packageId: string; packId: string }> = [];
   const visiting = new Set<string>();
   const visited = new Set<string>();
 
@@ -62,16 +132,17 @@ export function solvePackageGraph(input: {
       return;
     }
 
-    for (const dependency of manifest.dependsOn ?? []) {
-      if (!manifestMap.has(dependency)) {
+    for (const dependency of (dependencyMap.get(manifest.id) ?? []).filter((entry) => entry.class === "required")) {
+      const dependencyId = dependency.packageId;
+      if (!manifestMap.has(dependencyId)) {
         missingDependencies.push({
           packageId: manifest.id,
-          dependencyId: dependency
+          dependencyId
         });
-        warnings.push(`missing manifest for dependency ${dependency} required by ${manifest.id}`);
+        warnings.push(`missing manifest for dependency ${dependencyId} required by ${manifest.id}`);
         continue;
       }
-      visit(dependency);
+      visit(dependencyId);
     }
 
     if (manifest.trustTier === "unknown" && input.allowRestrictedPreviewForUnknownPlugins) {
@@ -85,6 +156,54 @@ export function solvePackageGraph(input: {
 
   for (const id of input.requested) {
     visit(id);
+  }
+
+  const recommendationSeen = new Set<string>();
+  const suggestedPackSeen = new Set<string>();
+  for (const id of input.requested) {
+    const manifest = manifestMap.get(id);
+    if (!manifest) {
+      continue;
+    }
+
+    for (const dependency of dependencyMap.get(id) ?? []) {
+      if (dependency.class === "required") {
+        continue;
+      }
+
+      const recommendation: InstallRecommendation = {
+        packageId: id,
+        dependencyId: dependency.packageId,
+        class: dependency.class,
+        present: manifestMap.has(dependency.packageId),
+        rationale: dependency.rationale
+      };
+      const key = `${recommendation.packageId}:${recommendation.class}:${recommendation.dependencyId}`;
+      if (recommendationSeen.has(key)) {
+        continue;
+      }
+      recommendationSeen.add(key);
+
+      if (recommendation.class === "optional") {
+        optionalDependencies.push(recommendation);
+      } else if (recommendation.class === "capability-enhancing") {
+        capabilityEnhancingDependencies.push(recommendation);
+      } else {
+        integrationOnlyDependencies.push(recommendation);
+      }
+    }
+
+    for (const packId of manifest.suggestedPacks ?? []) {
+      const key = `${id}:${packId}`;
+      if (suggestedPackSeen.has(key)) {
+        continue;
+      }
+      suggestedPackSeen.add(key);
+      suggestedPacks.push({
+        packageId: id,
+        packId
+      });
+    }
   }
 
   const unresolvedSubscriptions = input.manifests.flatMap((manifest) =>
@@ -106,6 +225,10 @@ export function solvePackageGraph(input: {
     warnings,
     missingDependencies,
     unresolvedSubscriptions,
-    duplicateCommands
+    duplicateCommands,
+    optionalDependencies,
+    capabilityEnhancingDependencies,
+    integrationOnlyDependencies,
+    suggestedPacks
   };
 }

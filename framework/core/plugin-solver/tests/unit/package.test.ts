@@ -11,6 +11,24 @@ describe("@platform/plugin-solver", () => {
         {
           id: "notifications-core",
           dependsOn: ["audit-core"],
+          dependencyContracts: [
+            {
+              packageId: "dashboard-core",
+              class: "optional",
+              rationale: "Improves notification visibility."
+            },
+            {
+              packageId: "portal-core",
+              class: "capability-enhancing",
+              rationale: "Adds portal delivery surfaces."
+            },
+            {
+              packageId: "integration-core",
+              class: "integration-only",
+              rationale: "Needed only for webhook bridge installs."
+            }
+          ],
+          suggestedPacks: ["sector-retail"],
           subscribesTo: ["erp.invoice.paid"],
           commands: ["notifications.messages.queue"],
           trustTier: "first-party"
@@ -33,5 +51,30 @@ describe("@platform/plugin-solver", () => {
     expect(result.unresolvedSubscriptions).toEqual([]);
     expect(result.duplicateCommands).toEqual(["notifications.messages.queue"]);
     expect(result.warnings).toContain("restricted preview enabled for audit-core");
+    expect(result.optionalDependencies).toEqual([
+      expect.objectContaining({
+        packageId: "notifications-core",
+        dependencyId: "dashboard-core",
+        class: "optional",
+        present: false
+      })
+    ]);
+    expect(result.capabilityEnhancingDependencies).toEqual([
+      expect.objectContaining({
+        packageId: "notifications-core",
+        dependencyId: "portal-core",
+        class: "capability-enhancing",
+        present: false
+      })
+    ]);
+    expect(result.integrationOnlyDependencies).toEqual([
+      expect.objectContaining({
+        packageId: "notifications-core",
+        dependencyId: "integration-core",
+        class: "integration-only",
+        present: false
+      })
+    ]);
+    expect(result.suggestedPacks).toEqual([{ packageId: "notifications-core", packId: "sector-retail" }]);
   });
 });

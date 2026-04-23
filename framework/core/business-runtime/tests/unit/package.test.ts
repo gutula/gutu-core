@@ -368,6 +368,22 @@ describe("@platform/business-runtime", () => {
           deprecates: []
         },
         {
+          id: "support-core",
+          kind: "plugin",
+          version: "1.0.0",
+          description: "Support truth.",
+          defaultCategory: businessCategory,
+          dependencyContracts: [{ packageId: "portal-core", class: "optional", version: ">=1.0 <2.0" }],
+          requestedCapabilities: [],
+          providesCapabilities: ["support.tickets"],
+          ownsData: ["support.tickets"],
+          extendsData: [],
+          publicCommands: [],
+          publicQueries: [],
+          publicEvents: [],
+          deprecates: []
+        },
+        {
           id: "inventory-core",
           kind: "plugin",
           version: "1.0.0",
@@ -462,6 +478,14 @@ describe("@platform/business-runtime", () => {
       expect.arrayContaining(["OWNERSHIP_CONFLICT", "MISSING_DEPENDENCY", "DEPRECATED_PACKAGE_PRESENT", "PACK_PLUGIN_CONSTRAINT"])
     );
     expect(report.capabilityProviders["accounting.posting-intents"]).toEqual(["accounting-core"]);
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "warning",
+          subject: "support-core->portal-core"
+        })
+      ])
+    );
   });
 
   it("previews, applies, and rolls back pack objects with merge semantics", () => {

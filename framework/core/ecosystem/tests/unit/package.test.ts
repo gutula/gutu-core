@@ -6,6 +6,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "bun:test";
 
 import {
+  catalogEntrySchema,
   createWorkspaceLock,
   doctorCoreRepository,
   loadRolloutOrganization,
@@ -97,6 +98,26 @@ function createSplitWorkspaceFixture(root: string) {
   writeFileSync(
     join(root, "plugins", "gutu-plugin-demo", "framework", "builtin-plugins", "demo", "package.json"),
     JSON.stringify({ name: "@plugins/demo", version: "4.5.6", private: false }, null, 2) + "\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(root, "plugins", "gutu-plugin-demo", "framework", "builtin-plugins", "demo", "package.ts"),
+    `import { definePackage } from "@platform/kernel";
+
+export default definePackage({
+  id: "demo-plugin",
+  kind: "plugin",
+  version: "4.5.6",
+  displayName: "Demo Plugin",
+  description: "Demo plugin for catalog sync tests.",
+  defaultCategory: {
+    id: "business",
+    label: "Business",
+    subcategoryId: "analytics_reporting",
+    subcategoryLabel: "Analytics & Reporting"
+  }
+});
+`,
     "utf8"
   );
 }
@@ -287,15 +308,150 @@ describe("@gutu/ecosystem", () => {
       const result = syncCatalogRepositories(root);
       expect(result.ok).toBe(true);
 
-      const librariesCatalog = JSON.parse(readFileSync(result.librariesCatalogPath, "utf8")) as { packages: Array<{ id: string }> };
-      const pluginsCatalog = JSON.parse(readFileSync(result.pluginsCatalogPath, "utf8")) as { packages: Array<{ id: string }> };
+      const librariesCatalog = JSON.parse(readFileSync(result.librariesCatalogPath, "utf8")) as {
+        packages: Array<{ id: string; canonicalId?: string }>;
+      };
+      const pluginsCatalog = JSON.parse(readFileSync(result.pluginsCatalogPath, "utf8")) as {
+        packages: Array<{
+          id: string;
+          channel?: string;
+          displayName?: string;
+          domainGroup?: string;
+          defaultCategory?: { id: string };
+          canonicalId?: string;
+        }>;
+      };
       expect(librariesCatalog.packages[0]?.id).toBe("@platform/demo");
+      expect(librariesCatalog.packages[0]?.canonicalId).toBe("@gutu/demo");
       expect(pluginsCatalog.packages[0]?.id).toBe("@plugins/demo");
+      expect(pluginsCatalog.packages[0]?.channel).toBe("next");
+      expect(pluginsCatalog.packages[0]?.displayName).toBe("Demo Plugin");
+      expect(pluginsCatalog.packages[0]?.domainGroup).toBe("Unclassified");
+      expect(pluginsCatalog.packages[0]?.defaultCategory?.id).toBe("business");
       expect(existsSync(join(root, "catalogs", "gutu-libraries", "channels", "stable.json"))).toBe(true);
       expect(existsSync(join(root, "catalogs", "gutu-plugins", "channels", "next.json"))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("preserves release artifacts while refreshing plugin presentation metadata from manifests", () => {
+    const root = mkdtempSync(join(tmpdir(), "gutu-rollout-sync-presentation-"));
+    try {
+      createSplitWorkspaceFixture(root);
+      writeFileSync(
+        join(root, "catalogs", "gutu-plugins", "catalog", "index.json"),
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            generatedAt: new Date(0).toISOString(),
+            packages: [
+              {
+                id: "@plugins/demo",
+                kind: "plugin",
+                repo: "gutula/gutu-plugin-demo",
+                version: "4.5.5",
+                channel: "stable",
+                displayName: "Old Name",
+                description: "Old description",
+                domainGroup: "Old Group",
+                defaultCategory: {
+                  id: "platform_governance",
+                  label: "Platform Governance",
+                  subcategoryId: "uncategorized",
+                  subcategoryLabel: "Uncategorized"
+                },
+                artifact: {
+                  uri: "https://example.com/demo.tgz",
+                  format: "tgz",
+                  sha256: "a".repeat(64),
+                  signature: "sig",
+                  publicKeyPem: "pem"
+                }
+              }
+            ]
+          },
+          null,
+          2
+        ) + "\n",
+        "utf8"
+      );
+
+      const result = syncCatalogRepositories(root);
+      const pluginsCatalog = JSON.parse(readFileSync(result.pluginsCatalogPath, "utf8")) as {
+        packages: Array<ReturnType<typeof catalogEntrySchema.parse>>;
+      };
+      const entry = pluginsCatalog.packages.find((candidate) => candidate.id === "@plugins/demo");
+
+      expect(entry?.displayName).toBe("Demo Plugin");
+      expect(entry?.description).toBe("Demo plugin for catalog sync tests.");
+      expect(entry?.defaultCategory?.subcategoryId).toBe("analytics_reporting");
+      expect(entry?.artifact?.uri).toBe("https://example.com/demo.tgz");
+      expect(entry?.channel).toBe("stable");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("downgrades unreleased stable-preferring packages onto the next channel", () => {
+    const root = mkdtempSync(join(tmpdir(), "gutu-rollout-sync-default-channel-"));
+    try {
+      createSplitWorkspaceFixture(root);
+      writeFileSync(
+        join(root, "plugins", "gutu-plugin-demo", "package.json"),
+        JSON.stringify(
+          {
+            name: "gutu-plugin-demo",
+            private: true,
+            workspaces: ["framework/builtin-plugins/*"],
+            gutuEcosystem: {
+              defaultChannel: "stable"
+            }
+          },
+          null,
+          2
+        ) + "\n",
+        "utf8"
+      );
+
+      const result = syncCatalogRepositories(root);
+      const pluginsCatalog = JSON.parse(readFileSync(result.pluginsCatalogPath, "utf8")) as {
+        packages: Array<{ id: string; channel?: string }>;
+      };
+      const stableChannel = JSON.parse(readFileSync(join(root, "catalogs", "gutu-plugins", "channels", "stable.json"), "utf8")) as {
+        packages: Array<{ id: string }>;
+      };
+      const nextChannel = JSON.parse(readFileSync(join(root, "catalogs", "gutu-plugins", "channels", "next.json"), "utf8")) as {
+        packages: Array<{ id: string }>;
+      };
+
+      expect(pluginsCatalog.packages.find((entry) => entry.id === "@plugins/demo")?.channel).toBe("next");
+      expect(stableChannel.packages).toHaveLength(0);
+      expect(nextChannel.packages[0]?.id).toBe("@plugins/demo");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed plugin presentation metadata in catalog entries", () => {
+    expect(() =>
+      catalogEntrySchema.parse({
+        id: "@plugins/demo",
+        kind: "plugin",
+        repo: "gutula/gutu-plugin-demo",
+        version: "1.0.0",
+        channel: "stable",
+        displayName: "Demo Plugin",
+        description: "Demo plugin",
+        domainGroup: "Business",
+        defaultCategory: {
+          id: "business",
+          label: "Business",
+          subcategoryId: "authentication",
+          subcategoryLabel: "Authentication"
+        }
+      })
+    ).toThrow();
   });
 
   it("promotes a signed release artifact into catalog and channel metadata", () => {

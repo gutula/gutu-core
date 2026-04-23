@@ -60,6 +60,8 @@ The rebuilt core baseline now includes:
 - rollout automation for batch repo scaffolding, catalog seeding, GitHub provisioning, and package publishing into live channels
 - repository-boundary doctor checks for keeping `gutu-core` plugin-free
 - first-party runtime packages for package metadata, permissions, schema, commands, events, jobs, database access, and plugin solving
+- first-party business runtime primitives for numbering, localization, tax, import quarantine, traceability, reconciliation, contract registry checks, pack preview or rollback, SQL-backed business state stores, durable outbox or inbox or dead-letter or projection orchestration, and shared Postgres or SQLite schema builders
+- business-suite scaffolding for 25 first-party business plugin repos, 13 business pack artifacts, repo-local CI, ERP parity catalogs, 11 named cross-plugin end-to-end business flows with durable report artifacts, full-suite resilience verification across all 25 business plugins, local signing or promotion flows, and direct cross-plugin contract scenario verification
 - an explicit orchestration model built around commands, durable events, and jobs/workflows instead of generic hooks
 - checked-in live topology metadata for cloning the real `gutula/*` repo graph during release orchestration and certification
 - standalone catalog repos with `catalog/index.json` plus `stable` and `next` channel files backed by signed GitHub Release artifacts
@@ -77,6 +79,7 @@ The rebuilt core baseline now includes:
 - `@platform/events`: durable outbox-style event envelopes, subscriptions, retries, dead-lettering, and replay
 - `@platform/jobs`: job definitions, retries, dead-letter handling, and workflow transitions
 - `@platform/db-drizzle`: postgres database client and raw SQL helpers for extracted first-party plugins
+- `@platform/business-runtime`: shared numbering, localization, import, pack, contract, traceability, and reconciliation primitives for business plugins
 - `@platform/plugin-solver`: dependency ordering plus command/event topology warnings
 
 ## Compare The Operating Model

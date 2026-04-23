@@ -7,7 +7,15 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
-import { assertRepositoryBoundary, definePackageManifest, type PackageManifest } from "@gutu/kernel";
+import {
+  assertRepositoryBoundary,
+  defaultPluginCategory,
+  definePackageManifest,
+  getPackageNamespaceMetadata,
+  pluginCategorySchema,
+  type PackageManifest,
+  type PluginCategory
+} from "@gutu/kernel";
 import {
   computeFileSha256,
   preparePackageReleaseBundle,
@@ -36,11 +44,50 @@ export type ArtifactDescriptor = z.infer<typeof artifactDescriptorSchema>;
 
 export const catalogEntrySchema = z.object({
   id: z.string().min(1),
+  canonicalId: z.string().min(1).optional(),
+  legacyIds: z.array(z.string().min(1)).optional(),
   kind: z.enum(["library", "plugin"]),
   repo: z.string().min(1),
   version: z.string().min(1),
   channel: z.string().min(1),
+  displayName: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  domainGroup: z.string().min(1).optional(),
+  defaultCategory: pluginCategorySchema.optional(),
   artifact: artifactDescriptorSchema.optional()
+}).superRefine((value, context) => {
+  if (value.kind !== "plugin") {
+    return;
+  }
+
+  if (!value.displayName) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Plugin catalog entries must include a displayName.",
+      path: ["displayName"]
+    });
+  }
+  if (!value.description) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Plugin catalog entries must include a description.",
+      path: ["description"]
+    });
+  }
+  if (!value.domainGroup) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Plugin catalog entries must include a domainGroup.",
+      path: ["domainGroup"]
+    });
+  }
+  if (!value.defaultCategory) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Plugin catalog entries must include a defaultCategory.",
+      path: ["defaultCategory"]
+    });
+  }
 });
 export type CatalogEntry = z.infer<typeof catalogEntrySchema>;
 
@@ -204,6 +251,10 @@ export type FirstPartyPackageRecord = {
   packageRelativePath: string;
   version: string;
   channel: string;
+  displayName?: string | undefined;
+  description?: string | undefined;
+  domainGroup?: string | undefined;
+  defaultCategory?: PluginCategory | undefined;
 };
 
 export type SyncCatalogRepositoriesOptions = {
@@ -219,6 +270,11 @@ export type SyncCatalogRepositoriesResult = {
   pluginsCatalogPath: string;
   libraries: number;
   plugins: number;
+};
+
+type CatalogSnapshot = {
+  valid: Map<string, CatalogEntry>;
+  passthrough: unknown[];
 };
 
 export type PublishPackageReleaseOptions = {
@@ -342,6 +398,7 @@ export function discoverFirstPartyPackages(
       if (!existsSync(nestedRoot)) {
         continue;
       }
+      const repoChannel = resolveDefaultChannel(repoRoot, "next");
 
       for (const packageFolder of readdirSync(nestedRoot)) {
         const packageRoot = join(nestedRoot, packageFolder);
@@ -353,10 +410,14 @@ export function discoverFirstPartyPackages(
         const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
           name?: string;
           version?: string;
+          description?: string;
         };
         if (!packageJson.name || !packageJson.version) {
           continue;
         }
+
+        const manifestMetadata =
+          root.kind === "plugin" ? readPluginManifestCatalogMetadata(workspaceRoot, packageRoot) : undefined;
 
         results.push({
           id: packageJson.name,
@@ -367,13 +428,101 @@ export function discoverFirstPartyPackages(
           packageRoot,
           packageRelativePath: nodePath.relative(repoRoot, packageRoot),
           version: packageJson.version,
-          channel: "stable"
+          channel: repoChannel,
+          ...(manifestMetadata?.displayName ? { displayName: manifestMetadata.displayName } : {}),
+          ...(manifestMetadata?.description
+            ? { description: manifestMetadata.description }
+            : packageJson.description
+              ? { description: packageJson.description }
+              : {}),
+          ...(manifestMetadata?.domainGroup ? { domainGroup: manifestMetadata.domainGroup } : {}),
+          ...(manifestMetadata?.defaultCategory ? { defaultCategory: manifestMetadata.defaultCategory } : {})
         });
       }
     }
   }
 
   return results.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+type PluginManifestCatalogMetadata = {
+  displayName: string;
+  description: string;
+  domainGroup: string;
+  defaultCategory: PluginCategory;
+};
+
+let cachedDomainGroupLookup: { workspaceRoot: string; groups: Map<string, string> } | undefined;
+
+function readPluginManifestCatalogMetadata(workspaceRoot: string, packageRoot: string): PluginManifestCatalogMetadata | undefined {
+  const manifestPath = join(packageRoot, "package.ts");
+  if (!existsSync(manifestPath)) {
+    return undefined;
+  }
+
+  const manifestText = readFileSync(manifestPath, "utf8");
+  const packageId = parseManifestStringField(manifestText, "id");
+  const displayName = parseManifestStringField(manifestText, "displayName");
+  const description = parseManifestStringField(manifestText, "description");
+  const manifestDomainGroup = parseManifestStringFieldOptional(manifestText, "domainGroup");
+  const defaultCategoryBody = parseManifestObjectField(manifestText, "defaultCategory");
+  if (!defaultCategoryBody) {
+    return undefined;
+  }
+
+  const defaultCategory = pluginCategorySchema.parse({
+    id: parseManifestStringField(defaultCategoryBody, "id"),
+    label: parseManifestStringField(defaultCategoryBody, "label"),
+    subcategoryId: parseManifestStringField(defaultCategoryBody, "subcategoryId"),
+    subcategoryLabel: parseManifestStringField(defaultCategoryBody, "subcategoryLabel")
+  });
+
+  const domainGroup = manifestDomainGroup ?? readPluginDomainGroups(workspaceRoot).get(packageId) ?? "Unclassified";
+  return {
+    displayName,
+    description,
+    domainGroup,
+    defaultCategory
+  };
+}
+
+function readPluginDomainGroups(workspaceRoot: string): Map<string, string> {
+  if (cachedDomainGroupLookup?.workspaceRoot === workspaceRoot) {
+    return cachedDomainGroupLookup.groups;
+  }
+
+  const groups = new Map<string, string>();
+  const profilesPath = join(workspaceRoot, "tooling", "plugin-docs", "profiles.mjs");
+  if (existsSync(profilesPath)) {
+    const profilesText = readFileSync(profilesPath, "utf8");
+    const matcher = /"([^"]+)"\s*:\s*\{\s*group:\s*"([^"]+)"/g;
+    let match = matcher.exec(profilesText);
+    while (match) {
+      const [pluginId, group] = [match[1], match[2]];
+      if (pluginId && group) {
+        groups.set(pluginId, group);
+      }
+      match = matcher.exec(profilesText);
+    }
+  }
+
+  cachedDomainGroupLookup = { workspaceRoot, groups };
+  return groups;
+}
+
+function resolveDefaultChannel(repoRoot: string, fallback: string): string {
+  const packageJsonPath = join(repoRoot, "package.json");
+  if (!existsSync(packageJsonPath)) {
+    return fallback;
+  }
+
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+    gutuEcosystem?: {
+      defaultChannel?: string;
+    };
+  };
+  const configuredChannel = packageJson.gutuEcosystem?.defaultChannel;
+  return configuredChannel === "next" || configuredChannel === "stable" ? configuredChannel : fallback;
 }
 
 export function syncCatalogRepositories(
@@ -393,21 +542,65 @@ export function syncCatalogRepositories(
 
   const currentLibraries = readCatalogEntries(librariesCatalogPath);
   const currentPlugins = readCatalogEntries(pluginsCatalogPath);
+  const librariesStableChannelPath = resolve(
+    workspaceRoot,
+    defaultCatalogFilePath(workspaceRoot, "library", "channels", "stable.json")
+  );
+  const librariesNextChannelPath = resolve(
+    workspaceRoot,
+    defaultCatalogFilePath(workspaceRoot, "library", "channels", "next.json")
+  );
+  const pluginsStableChannelPath = resolve(
+    workspaceRoot,
+    defaultCatalogFilePath(workspaceRoot, "plugin", "channels", "stable.json")
+  );
+  const pluginsNextChannelPath = resolve(
+    workspaceRoot,
+    defaultCatalogFilePath(workspaceRoot, "plugin", "channels", "next.json")
+  );
+  const currentLibrariesStableChannel = readCatalogEntries(librariesStableChannelPath);
+  const currentLibrariesNextChannel = readCatalogEntries(librariesNextChannelPath);
+  const currentPluginsStableChannel = readCatalogEntries(pluginsStableChannelPath);
+  const currentPluginsNextChannel = readCatalogEntries(pluginsNextChannelPath);
 
   const nextLibraries = packages
     .filter((entry) => entry.kind === "library")
-    .map((entry) => mergeCatalogEntry(entry, currentLibraries.get(entry.id)));
+    .map((entry) => mergeCatalogEntry(entry, currentLibraries.valid.get(entry.id)));
   const nextPlugins = packages
     .filter((entry) => entry.kind === "plugin")
-    .map((entry) => mergeCatalogEntry(entry, currentPlugins.get(entry.id)));
+    .map((entry) => mergeCatalogEntry(entry, currentPlugins.valid.get(entry.id)));
 
-  writeCatalogIndex(librariesCatalogPath, nextLibraries);
-  writeCatalogIndex(pluginsCatalogPath, nextPlugins);
+  writeCatalogIndex(librariesCatalogPath, nextLibraries, currentLibraries.passthrough);
+  writeCatalogIndex(pluginsCatalogPath, nextPlugins, currentPlugins.passthrough);
 
-  ensureChannelFile(resolve(workspaceRoot, defaultCatalogFilePath(workspaceRoot, "library", "channels", "stable.json")), "stable");
-  ensureChannelFile(resolve(workspaceRoot, defaultCatalogFilePath(workspaceRoot, "library", "channels", "next.json")), "next");
-  ensureChannelFile(resolve(workspaceRoot, defaultCatalogFilePath(workspaceRoot, "plugin", "channels", "stable.json")), "stable");
-  ensureChannelFile(resolve(workspaceRoot, defaultCatalogFilePath(workspaceRoot, "plugin", "channels", "next.json")), "next");
+  writeChannelFile(
+    librariesStableChannelPath,
+    "stable",
+    nextLibraries.filter((entry) => entry.channel === "stable"),
+    currentLibrariesStableChannel.passthrough,
+    nextLibraries
+  );
+  writeChannelFile(
+    librariesNextChannelPath,
+    "next",
+    nextLibraries.filter((entry) => entry.channel === "next"),
+    currentLibrariesNextChannel.passthrough,
+    nextLibraries
+  );
+  writeChannelFile(
+    pluginsStableChannelPath,
+    "stable",
+    nextPlugins.filter((entry) => entry.channel === "stable"),
+    currentPluginsStableChannel.passthrough,
+    nextPlugins
+  );
+  writeChannelFile(
+    pluginsNextChannelPath,
+    "next",
+    nextPlugins.filter((entry) => entry.channel === "next"),
+    currentPluginsNextChannel.passthrough,
+    nextPlugins
+  );
 
   return {
     ok: true,
@@ -863,31 +1056,6 @@ export function promoteReleaseArtifact(
 ): PromoteReleaseArtifactResult {
   const channel = options.channel ?? "stable";
   const workspaceRoot = tryResolveFrameworkWorkspaceRoot(cwd) ?? resolve(cwd);
-  const manifest = JSON.parse(readFileSync(resolve(cwd, options.manifestPath), "utf8")) as {
-    artifact: { path: string; sha256: string };
-    version: string;
-  };
-  const signature =
-    options.signatureBase64
-      ? { signature: options.signatureBase64 }
-      : options.signaturePath
-        ? JSON.parse(readFileSync(resolve(cwd, options.signaturePath), "utf8")) as { signature: string }
-        : undefined;
-  const entry = catalogEntrySchema.parse({
-    id: options.packageId,
-    kind: options.kind,
-    repo: options.repo,
-    version: manifest.version,
-    channel,
-    artifact: {
-      uri: joinUrl(options.uriBase, manifest.artifact.path),
-      format: "tgz",
-      sha256: manifest.artifact.sha256,
-      ...(signature ? { signature: signature.signature } : {}),
-      ...(options.publicKeyPem ? { publicKeyPem: options.publicKeyPem } : {})
-    }
-  });
-
   const catalogPath =
     resolve(
       workspaceRoot,
@@ -898,6 +1066,47 @@ export function promoteReleaseArtifact(
     workspaceRoot,
     options.channelPath ?? defaultCatalogFilePath(workspaceRoot, options.kind, "channels", `${channel}.json`)
   );
+  const currentCatalogEntry = readCatalogEntries(catalogPath).valid.get(options.packageId);
+  const packageRecord = discoverFirstPartyPackages(workspaceRoot, {
+    workspaceRoot,
+    kind: options.kind
+  }).find((candidate) => candidate.id === options.packageId || candidate.repo === options.repo);
+  const manifest = JSON.parse(readFileSync(resolve(cwd, options.manifestPath), "utf8")) as {
+    artifact: { path: string; sha256: string };
+    version: string;
+  };
+  const signature =
+    options.signatureBase64
+      ? { signature: options.signatureBase64 }
+      : options.signaturePath
+        ? JSON.parse(readFileSync(resolve(cwd, options.signaturePath), "utf8")) as { signature: string }
+        : undefined;
+  const namespace = getPackageNamespaceMetadata(options.packageId);
+  const entry = catalogEntrySchema.parse({
+    id: options.packageId,
+    canonicalId: namespace.canonicalId,
+    ...(namespace.legacyIds.length ? { legacyIds: namespace.legacyIds } : {}),
+    kind: options.kind,
+    repo: options.repo,
+    version: manifest.version,
+    channel,
+    ...(options.kind === "plugin"
+      ? {
+          displayName: currentCatalogEntry?.displayName ?? packageRecord?.displayName ?? humanizePackageId(options.packageId),
+          description:
+            currentCatalogEntry?.description ?? packageRecord?.description ?? `${humanizePackageId(options.packageId)} package.`,
+          domainGroup: currentCatalogEntry?.domainGroup ?? packageRecord?.domainGroup ?? "Unclassified",
+          defaultCategory: currentCatalogEntry?.defaultCategory ?? packageRecord?.defaultCategory ?? defaultPluginCategory
+        }
+      : {}),
+    artifact: {
+      uri: joinUrl(options.uriBase, manifest.artifact.path),
+      format: "tgz",
+      sha256: manifest.artifact.sha256,
+      ...(signature ? { signature: signature.signature } : {}),
+      ...(options.publicKeyPem ? { publicKeyPem: options.publicKeyPem } : {})
+    }
+  });
 
   upsertCatalogEntry(catalogPath, entry);
   upsertChannelEntry(channelPath, channel, entry);
@@ -949,31 +1158,131 @@ function defaultCatalogFilePath(
   return join("ecosystem", "channels", segments.at(-1) as string);
 }
 
-function readCatalogEntries(catalogPath: string): Map<string, CatalogEntry> {
-  if (!existsSync(catalogPath)) {
-    return new Map();
+function parseManifestObjectField(text: string, fieldName: string): string {
+  const startPattern = new RegExp(`${fieldPattern(fieldName)}\\s*:\\s*\\{`);
+  const match = startPattern.exec(text);
+  if (!match || match.index < 0) {
+    return "";
   }
 
-  const payload = JSON.parse(readFileSync(catalogPath, "utf8")) as { packages?: CatalogEntry[] };
-  return new Map((payload.packages ?? []).map((entry) => [entry.id, catalogEntrySchema.parse(entry)]));
+  const startIndex = match.index + match[0].length;
+  let depth = 1;
+  let cursor = startIndex;
+  while (cursor < text.length && depth > 0) {
+    const character = text[cursor];
+    if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+    }
+    cursor += 1;
+  }
+
+  return text.slice(startIndex, cursor - 1);
+}
+
+function parseManifestStringField(text: string, fieldName: string): string {
+  const matcher = new RegExp(`${fieldPattern(fieldName)}\\s*:\\s*"([^"]+)"`);
+  const match = matcher.exec(text)?.[1];
+  if (!match) {
+    throw new Error(`Missing string field '${fieldName}' in package manifest.`);
+  }
+  return match;
+}
+
+function parseManifestStringFieldOptional(text: string, fieldName: string): string | undefined {
+  const matcher = new RegExp(`${fieldPattern(fieldName)}\\s*:\\s*"([^"]+)"`);
+  return matcher.exec(text)?.[1];
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function fieldPattern(fieldName: string): string {
+  return `"?${escapeRegex(fieldName)}"?`;
+}
+
+function humanizePackageId(value: string): string {
+  return value
+    .replace(/^@[^/]+\//, "")
+    .split(/[-_.]/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function readCatalogEntries(catalogPath: string): CatalogSnapshot {
+  if (!existsSync(catalogPath)) {
+    return {
+      valid: new Map(),
+      passthrough: []
+    };
+  }
+
+  const payload = JSON.parse(readFileSync(catalogPath, "utf8")) as { packages?: unknown[] };
+  const valid = new Map<string, CatalogEntry>();
+  const passthrough: unknown[] = [];
+
+  for (const entry of payload.packages ?? []) {
+    const parsed = catalogEntrySchema.safeParse(entry);
+    if (parsed.success) {
+      valid.set(parsed.data.id, parsed.data);
+      continue;
+    }
+    passthrough.push(entry);
+  }
+
+  return {
+    valid,
+    passthrough
+  };
 }
 
 function mergeCatalogEntry(record: FirstPartyPackageRecord, current?: CatalogEntry): CatalogEntry {
+  const namespace = getPackageNamespaceMetadata(record.id);
   return catalogEntrySchema.parse({
     id: record.id,
+    canonicalId: namespace.canonicalId,
+    ...(namespace.legacyIds.length ? { legacyIds: namespace.legacyIds } : {}),
     kind: record.kind,
     repo: record.repo,
     version: record.version,
-    channel: current?.channel ?? record.channel,
+    channel: resolveCatalogChannel(record, current),
+    ...(record.kind === "plugin"
+      ? {
+          displayName: record.displayName ?? current?.displayName ?? humanizePackageId(record.id),
+          description: record.description ?? current?.description ?? `${humanizePackageId(record.id)} package.`,
+          domainGroup: record.domainGroup ?? current?.domainGroup ?? "Unclassified",
+          defaultCategory: record.defaultCategory ?? current?.defaultCategory ?? defaultPluginCategory
+        }
+      : {}),
     ...(current?.artifact ? { artifact: current.artifact } : {})
   });
 }
 
-function writeCatalogIndex(catalogPath: string, packages: CatalogEntry[]) {
+function normalizeCatalogChannel(channel: string | undefined, fallback: "stable" | "next" = "next"): "stable" | "next" {
+  return channel === "stable" || channel === "next" ? channel : fallback;
+}
+
+function resolveCatalogChannel(record: FirstPartyPackageRecord, current?: CatalogEntry): "stable" | "next" {
+  const preferredChannel = normalizeCatalogChannel(record.channel, "next");
+  const currentChannel = normalizeCatalogChannel(current?.channel, preferredChannel);
+
+  if (current?.artifact) {
+    return currentChannel;
+  }
+
+  return preferredChannel === "stable" ? "next" : preferredChannel;
+}
+
+function writeCatalogIndex(catalogPath: string, packages: CatalogEntry[], passthrough: unknown[] = []) {
+  const filteredPassthrough = filterPassthroughEntries(passthrough, packages);
+  const combinedPackages = [...filteredPassthrough, ...packages].sort(compareCatalogLikeEntries);
   writeJsonFile(catalogPath, {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    packages: [...packages].sort((left, right) => left.id.localeCompare(right.id))
+    packages: combinedPackages
   });
 }
 
@@ -986,6 +1295,22 @@ function ensureChannelFile(channelPath: string, channelId: string) {
     schemaVersion: 1,
     id: channelId,
     packages: [...(current.packages ?? [])].sort((left, right) => left.id.localeCompare(right.id))
+  });
+}
+
+function writeChannelFile(
+  channelPath: string,
+  channelId: string,
+  packages: CatalogEntry[],
+  passthrough: unknown[] = [],
+  allManagedEntries: CatalogEntry[] = packages
+) {
+  const filteredPassthrough = filterPassthroughEntries(passthrough, allManagedEntries);
+  const combinedPackages = [...filteredPassthrough, ...packages].sort(compareCatalogLikeEntries);
+  writeJsonFile(channelPath, {
+    schemaVersion: 1,
+    id: channelId,
+    packages: combinedPackages
   });
 }
 
@@ -1009,6 +1334,10 @@ function inferRepositorySlug(repoRoot: string, repoName: string): string {
 }
 
 function readGitRemote(repoRoot: string): string | undefined {
+  if (!existsSync(join(repoRoot, ".git"))) {
+    return undefined;
+  }
+
   const remote = spawnSync("git", ["remote", "get-url", "origin"], {
     cwd: repoRoot,
     encoding: "utf8"
@@ -1571,6 +1900,20 @@ function upsertChannelEntry(channelPath: string, channelId: string, entry: Catal
 function writeJsonFile(filePath: string, value: unknown) {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+}
+
+function compareCatalogLikeEntries(left: unknown, right: unknown): number {
+  const leftId = typeof left === "object" && left !== null && "id" in left && typeof left.id === "string" ? left.id : "";
+  const rightId = typeof right === "object" && right !== null && "id" in right && typeof right.id === "string" ? right.id : "";
+  return leftId.localeCompare(rightId);
+}
+
+function filterPassthroughEntries(passthrough: unknown[], managedEntries: CatalogEntry[]): unknown[] {
+  const managedIds = new Set(managedEntries.map((entry) => entry.id));
+  return passthrough.filter((entry) => {
+    const id = typeof entry === "object" && entry !== null && "id" in entry && typeof entry.id === "string" ? entry.id : undefined;
+    return !id || !managedIds.has(id);
+  });
 }
 
 function signArtifactDigest(sha256: string, privateKeyPem: string): string {

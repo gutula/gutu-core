@@ -49,6 +49,15 @@ describe("@gutu/ecosystem installs", () => {
                 repo: "gutula/gutu-plugin-sample",
                 version: "1.0.0",
                 channel: "stable",
+                displayName: "Sample Plugin",
+                description: "Sample plugin artifact.",
+                domainGroup: "Operational Data",
+                defaultCategory: {
+                  id: "business",
+                  label: "Business",
+                  subcategoryId: "work_management",
+                  subcategoryLabel: "Work Management"
+                },
                 artifact: {
                   uri: `file://${artifactPath}`,
                   format: "tgz",
@@ -111,6 +120,15 @@ describe("@gutu/ecosystem installs", () => {
                 repo: "gutula/gutu-plugin-remote",
                 version: "1.0.0",
                 channel: "stable",
+                displayName: "Remote Plugin",
+                description: "Remote plugin artifact.",
+                domainGroup: "Operational Data",
+                defaultCategory: {
+                  id: "business",
+                  label: "Business",
+                  subcategoryId: "work_management",
+                  subcategoryLabel: "Work Management"
+                },
                 artifact: {
                   uri: `http://127.0.0.1:${server.port}/sample.tgz`,
                   format: "tgz",
@@ -169,6 +187,15 @@ describe("@gutu/ecosystem installs", () => {
                 repo: "gutula/gutu-plugin-npm-style",
                 version: "1.0.0",
                 channel: "stable",
+                displayName: "Npm Style Plugin",
+                description: "Npm-style plugin artifact.",
+                domainGroup: "Operational Data",
+                defaultCategory: {
+                  id: "business",
+                  label: "Business",
+                  subcategoryId: "work_management",
+                  subcategoryLabel: "Work Management"
+                },
                 artifact: {
                   uri: `file://${artifactPath}`,
                   format: "tgz",

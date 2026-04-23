@@ -402,6 +402,43 @@ export type BusinessAdvancePrimaryRecordInput = {
   reasonCode?: string | undefined;
 };
 
+export type BusinessPlacePrimaryRecordOnHoldInput = {
+  tenantId: string;
+  actorId: string;
+  recordId: string;
+  expectedRevisionNo?: number | undefined;
+  reasonCode: string;
+};
+
+export type BusinessReleasePrimaryRecordHoldInput = {
+  tenantId: string;
+  actorId: string;
+  recordId: string;
+  expectedRevisionNo?: number | undefined;
+  reasonCode?: string | undefined;
+};
+
+export type BusinessAmendPrimaryRecordInput = {
+  tenantId: string;
+  actorId: string;
+  recordId: string;
+  amendedRecordId: string;
+  expectedRevisionNo?: number | undefined;
+  title?: string | undefined;
+  amountMinor?: number | undefined;
+  effectiveAt?: string | undefined;
+  reasonCode: string;
+};
+
+export type BusinessReversePrimaryRecordInput = {
+  tenantId: string;
+  actorId: string;
+  recordId: string;
+  reversalRecordId: string;
+  expectedRevisionNo?: number | undefined;
+  reasonCode: string;
+};
+
 export type BusinessReconcilePrimaryRecordInput = {
   tenantId: string;
   actorId: string;
@@ -1081,6 +1118,158 @@ export function createBusinessDomainStateStore<
 export function createBusinessPluginService(
   config: BusinessPluginServiceConfig<BusinessPrimaryRecordLike, BusinessSecondaryRecordLike, BusinessExceptionRecordLike>
 ) {
+  const genericEventIds = {
+    hold: `${config.pluginId}.record-held.v1`,
+    release: `${config.pluginId}.record-released.v1`,
+    amend: `${config.pluginId}.record-amended.v1`,
+    reverse: `${config.pluginId}.record-reversed.v1`
+  } as const;
+
+  function requirePrimaryRecord(
+    current: BusinessPluginState<BusinessPrimaryRecordLike, BusinessSecondaryRecordLike, BusinessExceptionRecordLike>,
+    input: {
+      tenantId: string;
+      recordId: string;
+      expectedRevisionNo?: number | undefined;
+    }
+  ): BusinessPrimaryRecordLike {
+    const existing = current.primaryRecords.find((entry) => entry.id === input.recordId && entry.tenantId === input.tenantId);
+    if (!existing) {
+      throw new Error(`Unknown primary record '${input.recordId}'.`);
+    }
+    if (input.expectedRevisionNo !== undefined && existing.revisionNo !== input.expectedRevisionNo) {
+      throw new Error(
+        `Revision mismatch for '${input.recordId}': expected ${input.expectedRevisionNo}, received ${existing.revisionNo}.`
+      );
+    }
+    return existing;
+  }
+
+  function targetActionLabel(requestedAction: string, target: string): string {
+    return `${requestedAction} -> ${target}`;
+  }
+
+  function buildSecondaryRecords(input: {
+    current: BusinessPluginState<BusinessPrimaryRecordLike, BusinessSecondaryRecordLike, BusinessExceptionRecordLike>;
+    tenantId: string;
+    primaryRecordId: string;
+    correlationId: string;
+    processId: string;
+    requestedAction: string;
+    reasonCode: string | null;
+    targets: readonly string[];
+    terminalStatus?: string | undefined;
+    labelPrefix?: string | undefined;
+  }): BusinessSecondaryRecordLike[] {
+    const timestamp = new Date().toISOString();
+    if (input.targets.length === 0) {
+      return [
+        {
+          id: `${input.primaryRecordId}:followup:${input.current.secondaryRecords.length + 1}`,
+          tenantId: input.tenantId,
+          primaryRecordId: input.primaryRecordId,
+          label: input.labelPrefix ?? `${config.displayName} Follow-up`,
+          status: input.terminalStatus ?? "completed",
+          requestedAction: input.requestedAction,
+          reasonCode: input.reasonCode,
+          correlationId: input.correlationId,
+          processId: input.processId,
+          updatedAt: timestamp
+        } satisfies BusinessSecondaryRecordLike
+      ];
+    }
+
+    return input.targets.map((target, index) => ({
+      id: `${input.primaryRecordId}:followup:${input.current.secondaryRecords.length + index + 1}`,
+      tenantId: input.tenantId,
+      primaryRecordId: input.primaryRecordId,
+      label: `${input.labelPrefix ?? config.displayName} ${target}`,
+      status: "requested",
+      requestedAction: targetActionLabel(input.requestedAction, target),
+      reasonCode: input.reasonCode,
+      correlationId: input.correlationId,
+      processId: input.processId,
+      updatedAt: timestamp
+    }));
+  }
+
+  function applySecondaryProjections(
+    state: BusinessOrchestrationState,
+    secondaryRecords: readonly BusinessSecondaryRecordLike[],
+    relatedMessageId: string
+  ): BusinessOrchestrationState {
+    let nextState = state;
+    for (const secondaryRecord of secondaryRecords) {
+      nextState = recordBusinessProjection(nextState, {
+        tenantId: secondaryRecord.tenantId,
+        pluginId: config.pluginId,
+        documentId: secondaryRecord.id,
+        projectionKey: `${config.secondaryResourceId}:${secondaryRecord.id}`,
+        relatedMessageIds: [relatedMessageId],
+        summary: {
+          status: secondaryRecord.status,
+          requestedAction: secondaryRecord.requestedAction
+        }
+      }).state;
+    }
+    return nextState;
+  }
+
+  function closeResolvedExceptions(
+    current: readonly BusinessExceptionRecordLike[],
+    tenantId: string,
+    primaryRecordId: string,
+    updatedAt: string
+  ): BusinessExceptionRecordLike[] {
+    return current.map((entry) =>
+      entry.primaryRecordId === primaryRecordId && entry.tenantId === tenantId && entry.status !== "closed"
+        ? ({
+            ...entry,
+            status: "closed",
+            updatedAt
+          } as BusinessExceptionRecordLike)
+        : entry
+    );
+  }
+
+  function upsertProjectionForPrimary(
+    state: BusinessOrchestrationState,
+    record: BusinessPrimaryRecordLike,
+    relatedMessageIds: readonly string[],
+    status: BusinessProjectionStatus
+  ): BusinessOrchestrationState {
+    return recordBusinessProjection(state, {
+      tenantId: record.tenantId,
+      pluginId: config.pluginId,
+      documentId: record.id,
+      projectionKey: `${config.primaryResourceId}:${record.id}`,
+      status,
+      relatedMessageIds,
+      summary: {
+        title: record.title,
+        recordState: record.recordState,
+        approvalState: record.approvalState,
+        postingState: record.postingState,
+        fulfillmentState: record.fulfillmentState,
+        reasonCode: record.reasonCode,
+        revisionNo: record.revisionNo
+      }
+    }).state;
+  }
+
+  function matchSecondaryRecordForTarget(
+    entry: BusinessSecondaryRecordLike,
+    documentId: string,
+    tenantId: string,
+    target: string
+  ): boolean {
+    return (
+      entry.primaryRecordId === documentId &&
+      entry.tenantId === tenantId &&
+      entry.requestedAction.includes(`-> ${target}`)
+    );
+  }
+
   return {
     async listPrimaryRecords(): Promise<BusinessPrimaryRecordLike[]> {
       const state = await config.store.loadState();
@@ -1129,6 +1318,8 @@ export function createBusinessPluginService(
           secondaryRecords: state.secondaryRecords.length,
           pendingApproval: state.primaryRecords.filter((entry) => entry.approvalState === "pending").length,
           posted: state.primaryRecords.filter((entry) => entry.postingState === "posted").length,
+          canceled: state.primaryRecords.filter((entry) => entry.recordState === "canceled").length,
+          archived: state.primaryRecords.filter((entry) => entry.recordState === "archived").length,
           openExceptions: state.exceptionRecords.filter((entry) => entry.status !== "closed").length
         },
         orchestration
@@ -1239,15 +1430,7 @@ export function createBusinessPluginService(
       let nextRecord: BusinessPrimaryRecordLike | null = null;
 
       await config.store.updateState((current) => {
-        const existing = current.primaryRecords.find((entry) => entry.id === input.recordId && entry.tenantId === input.tenantId);
-        if (!existing) {
-          throw new Error(`Unknown primary record '${input.recordId}'.`);
-        }
-        if (input.expectedRevisionNo !== undefined && existing.revisionNo !== input.expectedRevisionNo) {
-          throw new Error(
-            `Revision mismatch for '${input.recordId}': expected ${input.expectedRevisionNo}, received ${existing.revisionNo}.`
-          );
-        }
+        const existing = requirePrimaryRecord(current, input);
 
         const downstreamRefs =
           input.downstreamRef && !existing.downstreamRefs.includes(input.downstreamRef)
@@ -1267,18 +1450,19 @@ export function createBusinessPluginService(
         } satisfies BusinessPrimaryRecordLike;
         nextRecord = clonePrimaryRecordLike(primaryRecord);
 
-        const secondaryRecord = {
-          id: `${input.recordId}:followup:${current.secondaryRecords.length + 1}`,
+        const secondaryRecords = buildSecondaryRecords({
+          current,
           tenantId: input.tenantId,
           primaryRecordId: input.recordId,
-          label: `${config.displayName} Follow-up`,
-          status: input.recordState === "canceled" || input.fulfillmentState === "closed" ? "closed" : "completed",
-          requestedAction: config.advanceActionLabel,
-          reasonCode: input.reasonCode ?? existing.reasonCode,
           correlationId: primaryRecord.correlationId,
           processId: primaryRecord.processId,
-          updatedAt: new Date().toISOString()
-        } satisfies BusinessSecondaryRecordLike;
+          requestedAction: config.advanceActionLabel,
+          reasonCode: input.reasonCode ?? existing.reasonCode,
+          targets: config.orchestrationTargets.advance,
+          terminalStatus:
+            input.recordState === "canceled" || input.fulfillmentState === "closed" ? "closed" : "completed",
+          labelPrefix: `${config.displayName} Advance`
+        });
 
         const published = publishBusinessMessage(current.orchestration, {
           tenantId: input.tenantId,
@@ -1292,44 +1476,27 @@ export function createBusinessPluginService(
             approvalState: primaryRecord.approvalState,
             postingState: primaryRecord.postingState,
             fulfillmentState: primaryRecord.fulfillmentState,
-            requestedAction: secondaryRecord.requestedAction,
+            requestedAction: secondaryRecords[0]?.requestedAction ?? config.advanceActionLabel,
             revisionNo: primaryRecord.revisionNo
           },
           targets: config.orchestrationTargets.advance
         });
-        const projectedPrimary = recordBusinessProjection(published.state, {
-          tenantId: input.tenantId,
-          pluginId: config.pluginId,
-          documentId: input.recordId,
-          projectionKey: `${config.primaryResourceId}:${input.recordId}`,
-          status: published.inboxItems.length > 0 ? "pending" : "materialized",
-          relatedMessageIds: [published.message.id],
-          summary: {
-            title: primaryRecord.title,
-            recordState: primaryRecord.recordState,
-            approvalState: primaryRecord.approvalState,
-            postingState: primaryRecord.postingState,
-            fulfillmentState: primaryRecord.fulfillmentState,
-            revisionNo: primaryRecord.revisionNo
-          }
-        });
-        const projectedSecondary = recordBusinessProjection(projectedPrimary.state, {
-          tenantId: input.tenantId,
-          pluginId: config.pluginId,
-          documentId: secondaryRecord.id,
-          projectionKey: `${config.secondaryResourceId}:${secondaryRecord.id}`,
-          relatedMessageIds: [published.message.id],
-          summary: {
-            status: secondaryRecord.status,
-            requestedAction: secondaryRecord.requestedAction
-          }
-        });
+        let nextOrchestration = upsertProjectionForPrimary(
+          published.state,
+          primaryRecord,
+          [published.message.id],
+          published.inboxItems.length > 0 ? "pending" : "materialized"
+        );
+        nextOrchestration = applySecondaryProjections(nextOrchestration, secondaryRecords, published.message.id);
 
         return {
           ...current,
           primaryRecords: upsertBusinessEntity(current.primaryRecords, primaryRecord),
-          secondaryRecords: upsertBusinessEntity(current.secondaryRecords, secondaryRecord),
-          orchestration: projectedSecondary.state
+          secondaryRecords: secondaryRecords.reduce(
+            (entries, secondaryRecord) => upsertBusinessEntity(entries, secondaryRecord),
+            current.secondaryRecords
+          ),
+          orchestration: nextOrchestration
         };
       });
 
@@ -1356,20 +1523,177 @@ export function createBusinessPluginService(
       };
     },
 
+    async placePrimaryRecordOnHold(input: BusinessPlacePrimaryRecordOnHoldInput) {
+      normalizeActionInput(input);
+      let nextRecord: BusinessPrimaryRecordLike | null = null;
+      const exceptionId = `${input.recordId}:hold:${input.expectedRevisionNo ?? "latest"}`;
+
+      await config.store.updateState((current) => {
+        const existing = requirePrimaryRecord(current, input);
+        const updatedAt = new Date().toISOString();
+        const primaryRecord = {
+          ...existing,
+          approvalState: "pending",
+          reasonCode: `hold:${input.reasonCode}`,
+          revisionNo: existing.revisionNo + 1,
+          updatedAt
+        } satisfies BusinessPrimaryRecordLike;
+        const exceptionRecord = {
+          id: exceptionId,
+          tenantId: input.tenantId,
+          primaryRecordId: input.recordId,
+          severity: "low",
+          status: "open",
+          reasonCode: `hold:${input.reasonCode}`,
+          upstreamRef: null,
+          downstreamRef: null,
+          updatedAt
+        } satisfies BusinessExceptionRecordLike;
+        const projected = upsertProjectionForPrimary(current.orchestration, primaryRecord, [], "materialized");
+        nextRecord = clonePrimaryRecordLike(primaryRecord);
+
+        return {
+          ...current,
+          primaryRecords: upsertBusinessEntity(current.primaryRecords, primaryRecord),
+          exceptionRecords: upsertBusinessEntity(current.exceptionRecords, exceptionRecord),
+          orchestration: projected
+        };
+      });
+
+      if (!nextRecord) {
+        throw new Error("Failed to place business record on hold.");
+      }
+      const heldRecord = nextRecord as BusinessPrimaryRecordLike;
+
+      return {
+        ok: true as const,
+        recordId: input.recordId,
+        status: "open" as const,
+        revisionNo: heldRecord.revisionNo,
+        eventIds: [genericEventIds.hold],
+        jobIds: [config.reconciliationJobId]
+      };
+    },
+
+    async releasePrimaryRecordHold(input: BusinessReleasePrimaryRecordHoldInput) {
+      normalizeActionInput(input);
+      let nextRecord: BusinessPrimaryRecordLike | null = null;
+
+      await config.store.updateState((current) => {
+        const existing = requirePrimaryRecord(current, input);
+        const updatedAt = new Date().toISOString();
+        const primaryRecord = {
+          ...existing,
+          reasonCode: input.reasonCode ?? existing.reasonCode,
+          revisionNo: existing.revisionNo + 1,
+          updatedAt
+        } satisfies BusinessPrimaryRecordLike;
+        nextRecord = clonePrimaryRecordLike(primaryRecord);
+
+        return {
+          ...current,
+          primaryRecords: upsertBusinessEntity(current.primaryRecords, primaryRecord),
+          exceptionRecords: current.exceptionRecords.map((entry) =>
+            entry.primaryRecordId === input.recordId &&
+            entry.tenantId === input.tenantId &&
+            entry.status !== "closed" &&
+            entry.reasonCode.startsWith("hold:")
+              ? ({
+                  ...entry,
+                  status: "closed",
+                  updatedAt
+                } as BusinessExceptionRecordLike)
+              : entry
+          ),
+          orchestration: upsertProjectionForPrimary(current.orchestration, primaryRecord, [], "materialized")
+        };
+      });
+
+      if (!nextRecord) {
+        throw new Error("Failed to release business record hold.");
+      }
+      const releasedRecord = nextRecord as BusinessPrimaryRecordLike;
+
+      return {
+        ok: true as const,
+        recordId: input.recordId,
+        status: "closed" as const,
+        revisionNo: releasedRecord.revisionNo,
+        eventIds: [genericEventIds.release],
+        jobIds: [config.reconciliationJobId]
+      };
+    },
+
+    async amendPrimaryRecord(input: BusinessAmendPrimaryRecordInput) {
+      normalizeActionInput(input);
+      let amendedRecord: BusinessPrimaryRecordLike | null = null;
+
+      await config.store.updateState((current) => {
+        const existing = requirePrimaryRecord(current, input);
+        const updatedAt = new Date().toISOString();
+        const archivedOriginal = {
+          ...existing,
+          recordState: "archived",
+          reasonCode: `amended:${input.reasonCode}`,
+          downstreamRefs: existing.downstreamRefs.includes(input.amendedRecordId)
+            ? existing.downstreamRefs
+            : [...existing.downstreamRefs, input.amendedRecordId],
+          revisionNo: existing.revisionNo + 1,
+          updatedAt
+        } satisfies BusinessPrimaryRecordLike;
+        const nextAmendedRecord = {
+          ...existing,
+          id: input.amendedRecordId,
+          title: input.title ?? existing.title,
+          amountMinor: input.amountMinor ?? existing.amountMinor,
+          effectiveAt: input.effectiveAt ?? existing.effectiveAt,
+          approvalState: "pending",
+          postingState: "unposted",
+          fulfillmentState: "none",
+          revisionNo: 1,
+          reasonCode: input.reasonCode,
+          correlationId: `${existing.correlationId}:amend:${input.amendedRecordId}`,
+          processId: `${existing.processId}:amend`,
+          upstreamRefs: [...new Set([...existing.upstreamRefs, existing.id])],
+          downstreamRefs: [],
+          updatedAt
+        } satisfies BusinessPrimaryRecordLike;
+        amendedRecord = clonePrimaryRecordLike(nextAmendedRecord);
+
+        let nextOrchestration = upsertProjectionForPrimary(current.orchestration, archivedOriginal, [], "materialized");
+        nextOrchestration = upsertProjectionForPrimary(nextOrchestration, nextAmendedRecord, [], "materialized");
+
+        return {
+          ...current,
+          primaryRecords: upsertBusinessEntity(
+            upsertBusinessEntity(current.primaryRecords, archivedOriginal),
+            nextAmendedRecord
+          ),
+          orchestration: nextOrchestration
+        };
+      });
+
+      if (!amendedRecord) {
+        throw new Error("Failed to amend business record.");
+      }
+      const nextAmendedRecord = amendedRecord as BusinessPrimaryRecordLike;
+
+      return {
+        ok: true as const,
+        recordId: input.recordId,
+        amendedRecordId: input.amendedRecordId,
+        revisionNo: nextAmendedRecord.revisionNo,
+        eventIds: [genericEventIds.amend],
+        jobIds: [config.projectionJobId]
+      };
+    },
+
     async reconcilePrimaryRecord(input: BusinessReconcilePrimaryRecordInput) {
       normalizeActionInput(input);
       let nextRecord: BusinessPrimaryRecordLike | null = null;
 
       await config.store.updateState((current) => {
-        const existing = current.primaryRecords.find((entry) => entry.id === input.recordId && entry.tenantId === input.tenantId);
-        if (!existing) {
-          throw new Error(`Unknown primary record '${input.recordId}'.`);
-        }
-        if (input.expectedRevisionNo !== undefined && existing.revisionNo !== input.expectedRevisionNo) {
-          throw new Error(
-            `Revision mismatch for '${input.recordId}': expected ${input.expectedRevisionNo}, received ${existing.revisionNo}.`
-          );
-        }
+        const existing = requirePrimaryRecord(current, input);
 
         const exceptionRecord = {
           id: input.exceptionId,
@@ -1395,6 +1719,18 @@ export function createBusinessPluginService(
         } satisfies BusinessPrimaryRecordLike;
         nextRecord = clonePrimaryRecordLike(primaryRecord);
 
+        const secondaryRecords = buildSecondaryRecords({
+          current,
+          tenantId: input.tenantId,
+          primaryRecordId: input.recordId,
+          correlationId: primaryRecord.correlationId,
+          processId: primaryRecord.processId,
+          requestedAction: "Reconcile Downstream Effects",
+          reasonCode: input.reasonCode,
+          targets: config.orchestrationTargets.reconcile,
+          terminalStatus: "completed",
+          labelPrefix: `${config.displayName} Reconcile`
+        });
         const published = publishBusinessMessage(current.orchestration, {
           tenantId: input.tenantId,
           pluginId: config.pluginId,
@@ -1410,24 +1746,14 @@ export function createBusinessPluginService(
           },
           targets: config.orchestrationTargets.reconcile
         });
-        const projectedPrimary = recordBusinessProjection(published.state, {
-          tenantId: input.tenantId,
-          pluginId: config.pluginId,
-          documentId: input.recordId,
-          projectionKey: `${config.primaryResourceId}:${input.recordId}`,
-          status: published.inboxItems.length > 0 ? "pending" : "materialized",
-          relatedMessageIds: [published.message.id],
-          summary: {
-            title: primaryRecord.title,
-            recordState: primaryRecord.recordState,
-            approvalState: primaryRecord.approvalState,
-            postingState: primaryRecord.postingState,
-            fulfillmentState: primaryRecord.fulfillmentState,
-            reasonCode: primaryRecord.reasonCode,
-            revisionNo: primaryRecord.revisionNo
-          }
-        });
-        const projectedException = recordBusinessProjection(projectedPrimary.state, {
+        let nextOrchestration = upsertProjectionForPrimary(
+          published.state,
+          primaryRecord,
+          [published.message.id],
+          published.inboxItems.length > 0 ? "pending" : "materialized"
+        );
+        nextOrchestration = applySecondaryProjections(nextOrchestration, secondaryRecords, published.message.id);
+        nextOrchestration = recordBusinessProjection(nextOrchestration, {
           tenantId: input.tenantId,
           pluginId: config.pluginId,
           documentId: exceptionRecord.id,
@@ -1438,13 +1764,17 @@ export function createBusinessPluginService(
             status: exceptionRecord.status,
             reasonCode: exceptionRecord.reasonCode
           }
-        });
+        }).state;
 
         return {
           ...current,
           primaryRecords: upsertBusinessEntity(current.primaryRecords, primaryRecord),
+          secondaryRecords: secondaryRecords.reduce(
+            (entries, secondaryRecord) => upsertBusinessEntity(entries, secondaryRecord),
+            current.secondaryRecords
+          ),
           exceptionRecords: upsertBusinessEntity(current.exceptionRecords, exceptionRecord),
-          orchestration: projectedException.state
+          orchestration: nextOrchestration
         };
       });
 
@@ -1465,6 +1795,115 @@ export function createBusinessPluginService(
         status: "open" as const,
         revisionNo: reconciledRecord.revisionNo,
         eventIds: [config.reconcileEvent],
+        jobIds: [config.reconciliationJobId]
+      };
+    },
+
+    async reversePrimaryRecord(input: BusinessReversePrimaryRecordInput) {
+      normalizeActionInput(input);
+      let reversalRecord: BusinessPrimaryRecordLike | null = null;
+
+      await config.store.updateState((current) => {
+        const existing = requirePrimaryRecord(current, input);
+        const updatedAt = new Date().toISOString();
+        const reversedOriginal = {
+          ...existing,
+          recordState: "canceled",
+          postingState: "reversed",
+          fulfillmentState: existing.fulfillmentState === "closed" ? existing.fulfillmentState : "closed",
+          reasonCode: `reversed:${input.reasonCode}`,
+          downstreamRefs: existing.downstreamRefs.includes(input.reversalRecordId)
+            ? existing.downstreamRefs
+            : [...existing.downstreamRefs, input.reversalRecordId],
+          revisionNo: existing.revisionNo + 1,
+          updatedAt
+        } satisfies BusinessPrimaryRecordLike;
+        const nextReversalRecord = {
+          ...existing,
+          id: input.reversalRecordId,
+          title: `${existing.title} Reversal`,
+          amountMinor: Math.abs(existing.amountMinor) * -1,
+          recordState: "canceled",
+          approvalState: "approved",
+          postingState: "reversed",
+          fulfillmentState: "closed",
+          revisionNo: 1,
+          reasonCode: input.reasonCode,
+          correlationId: `${existing.correlationId}:reverse:${input.reversalRecordId}`,
+          processId: `${existing.processId}:reverse`,
+          upstreamRefs: [...new Set([...existing.upstreamRefs, existing.id])],
+          downstreamRefs: [],
+          updatedAt
+        } satisfies BusinessPrimaryRecordLike;
+        reversalRecord = clonePrimaryRecordLike(nextReversalRecord);
+
+        const secondaryRecords = buildSecondaryRecords({
+          current,
+          tenantId: input.tenantId,
+          primaryRecordId: nextReversalRecord.id,
+          correlationId: nextReversalRecord.correlationId,
+          processId: nextReversalRecord.processId,
+          requestedAction: "Post Reversal Downstream",
+          reasonCode: input.reasonCode,
+          targets: config.orchestrationTargets.reconcile,
+          terminalStatus: "completed",
+          labelPrefix: `${config.displayName} Reversal`
+        });
+        const published = publishBusinessMessage(current.orchestration, {
+          tenantId: input.tenantId,
+          pluginId: config.pluginId,
+          documentId: nextReversalRecord.id,
+          type: genericEventIds.reverse,
+          correlationId: nextReversalRecord.correlationId,
+          processId: nextReversalRecord.processId,
+          payload: {
+            title: nextReversalRecord.title,
+            amountMinor: nextReversalRecord.amountMinor,
+            reasonCode: nextReversalRecord.reasonCode,
+            revisionNo: nextReversalRecord.revisionNo
+          },
+          targets: config.orchestrationTargets.reconcile
+        });
+
+        let nextOrchestration = upsertProjectionForPrimary(
+          published.state,
+          reversedOriginal,
+          [],
+          "materialized"
+        );
+        nextOrchestration = upsertProjectionForPrimary(
+          nextOrchestration,
+          nextReversalRecord,
+          [published.message.id],
+          published.inboxItems.length > 0 ? "pending" : "materialized"
+        );
+        nextOrchestration = applySecondaryProjections(nextOrchestration, secondaryRecords, published.message.id);
+
+        return {
+          ...current,
+          primaryRecords: upsertBusinessEntity(
+            upsertBusinessEntity(current.primaryRecords, reversedOriginal),
+            nextReversalRecord
+          ),
+          secondaryRecords: secondaryRecords.reduce(
+            (entries, secondaryRecord) => upsertBusinessEntity(entries, secondaryRecord),
+            current.secondaryRecords
+          ),
+          orchestration: nextOrchestration
+        };
+      });
+
+      if (!reversalRecord) {
+        throw new Error("Failed to reverse business record.");
+      }
+      const nextReversalRecord = reversalRecord as BusinessPrimaryRecordLike;
+
+      return {
+        ok: true as const,
+        recordId: input.recordId,
+        reversalRecordId: input.reversalRecordId,
+        revisionNo: nextReversalRecord.revisionNo,
+        eventIds: [genericEventIds.reverse],
         jobIds: [config.reconciliationJobId]
       };
     },
@@ -1505,19 +1944,20 @@ export function createBusinessPluginService(
                 : entry
             )
           : current.primaryRecords;
+        const nextSecondaryRecords = current.secondaryRecords.map((entry) =>
+          matchSecondaryRecordForTarget(entry, currentItem.documentId, input.tenantId, currentItem.target) &&
+          entry.status !== "closed"
+            ? ({
+                ...entry,
+                status: documentHasPendingDownstream ? "completed" : "closed",
+                reasonCode: input.resolutionRef ?? entry.reasonCode,
+                updatedAt: resolvedAt
+              } as BusinessSecondaryRecordLike)
+            : entry
+        );
         const nextExceptionRecords = documentHasPendingDownstream
           ? current.exceptionRecords
-          : current.exceptionRecords.map((entry) =>
-              entry.primaryRecordId === currentItem.documentId &&
-              entry.tenantId === input.tenantId &&
-              entry.status !== "closed"
-                ? ({
-                    ...entry,
-                    status: "closed",
-                    updatedAt: resolvedAt
-                  } as BusinessExceptionRecordLike)
-                : entry
-            );
+          : closeResolvedExceptions(current.exceptionRecords, input.tenantId, currentItem.documentId, resolvedAt);
         const projected = recordBusinessProjection(resolved.state, {
           tenantId: input.tenantId,
           pluginId: config.pluginId,
@@ -1534,6 +1974,7 @@ export function createBusinessPluginService(
         return {
           ...current,
           primaryRecords: nextPrimaryRecords,
+          secondaryRecords: nextSecondaryRecords,
           exceptionRecords: nextExceptionRecords,
           orchestration: projected.state
         };
@@ -1565,6 +2006,18 @@ export function createBusinessPluginService(
           error: input.error,
           maxAttempts: input.maxAttempts
         });
+        const updatedAt = new Date().toISOString();
+        const exceptionRecord = {
+          id: `${currentItem.documentId}:downstream:${sanitizeIdentifier(currentItem.target)}`,
+          tenantId: input.tenantId,
+          primaryRecordId: currentItem.documentId,
+          severity: failed.inboxItem.status === "dead-letter" ? "high" : "medium",
+          status: "open",
+          reasonCode: input.error,
+          upstreamRef: currentItem.messageId,
+          downstreamRef: currentItem.target,
+          updatedAt
+        } satisfies BusinessExceptionRecordLike;
         const projected = recordBusinessProjection(failed.state, {
           tenantId: input.tenantId,
           pluginId: config.pluginId,
@@ -1579,6 +2032,17 @@ export function createBusinessPluginService(
 
         return {
           ...current,
+          secondaryRecords: current.secondaryRecords.map((entry) =>
+            matchSecondaryRecordForTarget(entry, currentItem.documentId, input.tenantId, currentItem.target)
+              ? ({
+                  ...entry,
+                  status: failed.inboxItem.status === "dead-letter" ? "failed" : "in-progress",
+                  reasonCode: input.error,
+                  updatedAt
+                } as BusinessSecondaryRecordLike)
+              : entry
+          ),
+          exceptionRecords: upsertBusinessEntity(current.exceptionRecords, exceptionRecord),
           orchestration: projected.state
         };
       });
@@ -1612,6 +2076,7 @@ export function createBusinessPluginService(
 
         target = deadLetter.target;
         const replayed = replayBusinessDeadLetter(current.orchestration, input.deadLetterId);
+        const updatedAt = new Date().toISOString();
         const projected = recordBusinessProjection(replayed.state, {
           tenantId: input.tenantId,
           pluginId: config.pluginId,
@@ -1626,6 +2091,15 @@ export function createBusinessPluginService(
 
         return {
           ...current,
+          secondaryRecords: current.secondaryRecords.map((entry) =>
+            matchSecondaryRecordForTarget(entry, deadLetter.documentId, input.tenantId, deadLetter.target)
+              ? ({
+                  ...entry,
+                  status: "requested",
+                  updatedAt
+                } as BusinessSecondaryRecordLike)
+              : entry
+          ),
           orchestration: projected.state
         };
       });
@@ -3400,6 +3874,10 @@ function normalizeStringArray(value: unknown): string[] {
 
 function normalizeRecord(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? normalizeActionInput(value) : {};
+}
+
+function sanitizeIdentifier(value: string): string {
+  return value.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
 }
 
 function normalizeTimestamp(value: unknown): string {

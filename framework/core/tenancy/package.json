@@ -1,0 +1,11 @@
+{
+  "name": "@platform/tenancy",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./context": "./src/context.ts",
+    "./resolver": "./src/resolver.ts",
+    "./dbx": "./src/dbx/index.ts"
+  }
+}
